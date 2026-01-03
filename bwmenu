@@ -1,0 +1,213 @@
+#!/usr/bin/env python3
+import requests
+import subprocess as s
+from typing import Optional, Tuple
+import os
+
+WOFI_CFG=os.path.expanduser("~/.config/wofi/dracula/style.css")
+WOFI=["wofi", "-W", "450", "--show", "dmenu", "-s", WOFI_CFG]
+
+class Bw():
+    def __init__(self, host: str, port: int, timeout: int = 5):
+        self.host = host
+        self.port = port
+        self.timeout = timeout
+        self._data = None  # Cambiar a None para mejor cache
+        self.session = requests.Session()
+
+    def _request(self, method, endpoint, **kwargs):
+        """Método centralizado para requests HTTP"""
+        url = f'http://{self.host}:{self.port}/{endpoint.lstrip("/")}'
+        kwargs.setdefault('timeout', self.timeout)
+        return self.session.request(method, url, **kwargs)
+
+    def lock(self):
+        """Bloquea el vault"""
+        return self._request('POST', '/lock')
+
+    def unlock(self):
+        """Desbloquea el vault"""
+        contra = self.menuContra()
+        return self._request('POST', '/unlock', json={'password': contra})
+
+    @property
+    def data(self):
+        """Property con lazy loading de datos"""
+        if self._data is None:
+            self.leeDatos()
+        return self._data
+
+    def leeDatos(self):
+        """Carga los datos del vault"""
+        response = self._request('GET', '/list/object/items')
+        response.raise_for_status()
+        self._data = response.json()
+
+    @property
+    def getNombres(self) -> list:
+        """Retorna lista de elementos en formato 'nombre: usuario'"""
+        if self._data is None:
+            self.leeDatos()
+        
+        res = []
+        for item in self.data['data']['data']:
+            if 'login' in item:
+                name = item['name']
+                username = item['login'].get('username', '')
+                if username:  # Solo si tiene username
+                    res.append(f"{name}: {username}")
+        return sorted(res)  # Ordenado y sin duplicados
+
+    def getDatos(self, nombre: str, username: str) -> Optional[Tuple]:
+        """Obtiene datos específicos de un elemento"""
+        for item in self.data['data']['data']:
+            if (item.get('name') == nombre and 
+                'login' in item and 
+                item['login'].get('username') == username):
+                
+                login_data = item['login']
+                return (
+                    login_data.get('password'),
+                    login_data.get('username'),
+                    item.get('id'),
+                    login_data.get('totp')
+                )
+        return None
+
+    def getTotp(self, nombre: str, username: str) -> Optional[str]:
+        """Obtiene código TOTP para un elemento"""
+        datos = self.getDatos(nombre, username)
+        if datos and datos[2]:  # Si tiene ID
+            item_id = datos[2]
+            response = self._request('GET', f'/object/totp/{item_id}')
+            if response.status_code == 200:
+                return response.json()['data']['data']
+        return None
+
+    @property
+    def estado(self) -> Optional[str]:
+        """Retorna: 'unlocked', 'locked' o None si hay error"""
+        try:
+            response = self._request('GET', '/status')
+            response.raise_for_status()
+            data = response.json()
+            if data.get('success'):
+                return data['data']['template']['status']
+        except requests.RequestException:
+            print('Error de conexión con el host')
+        return None
+
+    def menuContra(self) -> Optional[str]:
+        """Muestra menú para ingresar contraseña"""
+        menu = s.run(
+            WOFI+["--password", "--prompt", "Contraseña:"],
+            input='Introduce la contraseña para desbloquear',
+            capture_output=True,
+            text=True
+        )
+        if menu.returncode == 0:
+            return menu.stdout.strip()
+        return None
+
+    def menuElementos(self) -> Optional[str]:
+        """Muestra menú para seleccionar elemento"""
+        menu = s.run(
+            WOFI+["--prompt", "🔍 Selecciona elemento:"],
+            input='\n'.join(["🔒 Bloquear gestor contraseñas"]+self.getNombres),
+            capture_output=True,
+            text=True
+        )
+        if menu.returncode == 0:
+            return menu.stdout.strip()
+        return None
+
+    def menuCopiaDato(self, elemento: str) -> Optional[str]:
+        """Muestra menú para seleccionar qué dato copiar"""
+        if elemento[2:] == 'Bloquear gestor contraseñas':
+            self.lock()
+            self.notificacion('<b>🔒 Gestor bloqueado</b>')
+            return None
+
+        sitio, username = elemento.split(':', 1)
+        sitio = sitio.strip()
+        username = username.strip()
+        
+        datos = self.getDatos(sitio, username)
+        if not datos:
+            return None
+        
+        elementos = [f'👤 Username: {username}', '🔒 Contraseña: *******']
+        if datos[3]:  # Si tiene TOTP
+            elementos.append('⏱️ TOTP: ******')
+        
+        menu = s.run(
+            WOFI+["--prompt", "Selecciona dato a copiar:"],
+            input='\n'.join(elementos),
+            capture_output=True,
+            text=True
+        )
+        if menu.returncode == 0:
+            return menu.stdout.strip()
+        return None
+
+    def notificacion(self, texto: str):
+        s.run(
+            ["notify-send", "-a", "Bitwarden", "-t", "3000", "Bitwarden", texto]
+        )
+
+
+    def main(self):
+        """Flujo principal de la aplicación"""
+        if not (elemento := self.menuElementos()):
+            return
+        
+        if not (dato := self.menuCopiaDato(elemento)):
+            return
+        
+        sitio, username = elemento.split(':', 1)
+        sitio = sitio.strip()
+        username = username.strip()
+        
+        if dato.startswith('👤 Username'):
+            s.run(['wl-copy', username], check=False)
+            self.notificacion('<b>👤  Username copiado</b>')
+        elif dato.startswith('🔒 Contraseña'):
+            password, *_ = self.getDatos(sitio, username) or ('',)
+            if password:
+                s.run(['wl-copy'], input=password, text=True, timeout=5, check=False)
+                self.notificacion('<b>🔒 Contraseña copiada</b>')
+        elif dato.startswith('⏱️ TOTP'):
+            totp = self.getTotp(sitio, username)
+            if totp:
+                s.run(['wl-copy', totp], check=False)
+                self.notificacion('<b>⏱️  TOTP copiado</b>')
+
+if __name__ == '__main__':
+    bw = Bw('rpi5c', 9090)
+    
+    estado = bw.estado
+    if estado is None:
+        print("No se pudo conectar al servidor")
+        exit(1)
+    
+    if estado == 'locked':
+        res = bw.unlock()
+        if not res.json().get('success'):
+            print("Error al desbloquear")
+            exit(1)
+        # Después de desbloquear, hay que recargar datos
+        bw._data = None
+    
+    s.run([os.path.expanduser('~/.local/bin/mata-bloqueo-bw.sh')],
+            stderr=s.STDOUT,
+            text=True
+    )
+    
+    s.Popen(
+        ['bash', os.path.expanduser('~/.local/bin/bloquea-bw.sh'), "10"],
+        stdout=s.PIPE,  # Capturar salida
+        stderr=s.PIPE,
+        text=True
+    )
+
+    bw.main()
