@@ -21,6 +21,10 @@ class Bw():
         kwargs.setdefault('timeout', self.timeout)
         return self.session.request(method, url, **kwargs)
 
+    def sync(self):
+        """Refresca datos del servicir"""
+        return self._request('POST', '/sync')
+
     def lock(self):
         """Bloquea el vault"""
         return self._request('POST', '/lock')
@@ -113,7 +117,8 @@ class Bw():
         """Muestra menú para seleccionar elemento"""
         menu = s.run(
             WOFI+["--prompt", "🔍 Selecciona elemento:"],
-            input='\n'.join(["🔒 Bloquear gestor contraseñas"]+self.getNombres),
+            input='\n'.join(["🔒 Bloquear gestor contraseñas",
+                            "󰑖  Releer datos"] + self.getNombres),
             capture_output=True,
             text=True
         )
@@ -127,6 +132,10 @@ class Bw():
             self.lock()
             self.notificacion('<b>🔒 Gestor bloqueado</b>')
             return None
+        elif elemento == "󰑖  Releer datos":
+            self.sync()
+            self.notificacion('<b>󰑖 Datos sicronizados</b>')
+            elemento=self.menuElementos()
 
         sitio, username = elemento.split(':', 1)
         sitio = sitio.strip()
