@@ -65,7 +65,7 @@ class Bw():
     def getDatos(self, nombre: str, username: str) -> Optional[Tuple]:
         """Obtiene datos específicos de un elemento"""
         for item in self.data['data']['data']:
-            if (item.get('name') == nombre and 
+            if (item.get('name').strip() == nombre.strip() and 
                 'login' in item and 
                 item['login'].get('username') == username):
                 
