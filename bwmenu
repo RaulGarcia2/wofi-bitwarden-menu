@@ -90,7 +90,7 @@ class Bw():
             items = self.data.get('data', {}).get('data', [])
             for item in items:
                 if 'login' in item:
-                    name = item['name']
+                    name = item['name'].strip()
                     username = item['login'].get('username', '')
                     if username:
                         res.append(f"{name}: {username}")
