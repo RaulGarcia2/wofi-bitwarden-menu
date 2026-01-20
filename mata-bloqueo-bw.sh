@@ -1,6 +1,6 @@
 #!/bin/bash
 
-PROCESO="${HOME}/.local/bin/bloquea-bw.sh"
+PROCESO="/usr/bin/wofi-bitwarden-bloquea"
 
 PID=$(pgrep -u ${UID} -f "$PROCESO")
 
@@ -15,5 +15,5 @@ if [ -n "$PID" ]; then
         echo "Matado ${x}"
     done
 else
-    echo "El proceso $PROCESS_NAME no se está ejecutando."
+    echo "El proceso $PROCESO no se está ejecutando."
 fi

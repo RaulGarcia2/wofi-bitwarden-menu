@@ -199,7 +199,7 @@ class Bw():
 
     def notificacion(self, texto: str):
         s.run(
-            ["notify-send", "-a", "Bitwarden", "-t", "3000", "Bitwarden", texto]
+            ["notify-send", "-a", "wofi-bitwarden-menu", "-t", "3000", "Bitwarden", texto]
         )
 
     def main(self):
@@ -254,13 +254,11 @@ if __name__ == '__main__':
         bw._data = None
     
     # Reiniciar temporizador de bloqueo
-    mata_script = os.path.expanduser('~/.local/bin/mata-bloqueo-bw.sh')
-    if os.path.exists(mata_script):
-        s.run([mata_script], stderr=s.DEVNULL, text=True)
+    if s.run(["which", "wofi-bitwarden-mata"], stdout=s.DEVNULL).returncode == 0:
+        s.run(["wofi-bitwarden-mata"], stderr=s.DEVNULL, text=True)
     
-    bloquea_script = os.path.expanduser('~/.local/bin/bloquea-bw.sh')
-    if os.path.exists(bloquea_script):
-        s.Popen(['bash', bloquea_script, str(CONFIG['LOCK_TIMEOUT'])],
+    if s.run(["which", "wofi-bitwarden-bloquea"], stdout=s.DEVNULL).returncode == 0:
+        s.Popen(['wofi-bitwarden-bloquea', str(CONFIG['LOCK_TIMEOUT'])],
                 stdout=s.DEVNULL, stderr=s.DEVNULL, text=True)
 
     bw.main()

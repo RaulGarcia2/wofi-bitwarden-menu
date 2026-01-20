@@ -1,0 +1,4 @@
+bwmenu.1
+debian/
+build/
+*.deb
