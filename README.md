@@ -9,8 +9,25 @@ Es necesario tener instalado en el equipo los siguientes programas:
 - libnotify-bin
 - servidor con bw: es necesario disponer en algún equipo de la red local de un servidor que tenga instalado bw para acceder al servidor de Bitwarden donde estén los datos
 
+## Configuración
+
+La aplicación lee su configuración de `${HOME}/.config/bwmenu.conf`. Si el archivo no existe, usa valores por defecto (localhost:9090).
+
+Ejemplo de contenido para `bwmenu.conf`:
+```ini
+HOST=rpi5c
+PORT=9090
+WOFI_CFG=~/.config/wofi/dracula/style.css
+LOCK_TIMEOUT=10
+```
+
+*   **HOST**: Dirección del servidor donde corre `bw serve`.
+*   **PORT**: Puerto del servidor.
+*   **WOFI_CFG**: Ruta al archivo CSS de estilo para wofi.
+*   **LOCK_TIMEOUT**: Tiempo en minutos para el bloqueo automático del cofre.
+
 ## Instalación
-Copiar el script python *bwmenu* u los scripts bash *mata-bloqueo-bw.sh* y *bloquea-bs.sh* en la carpeta _$HOME/.local/bin_ , o en una carpeta incluida dentro de la variable de entorno PATH.
+Copiar el script python *bwmenu* y los scripts bash *mata-bloqueo-bw.sh* y *bloquea-bw.sh* en la carpeta _$HOME/.local/bin_ , o en una carpeta incluida dentro de la variable de entorno PATH.
 
 Se creará un acceso de teclado con el que iniciar el script desde donde estemos para poder copiar y pegar datos de usuario.
 
@@ -24,4 +41,4 @@ bw serve --hostname rpi5c --port 9090
 ```
 En el ejemplo hay configurado un equipo llamado *rpi5c* y el puerto *9090*. En el script que ejecuta nuestra aplicación habrá que confiturar la variable HOST para que haga referencia a este equipo y este puerto.
 
-El script de la aplicación tiene configurado un estilo y una configuración que puede ser modificada al gusto del usuario
+El script de la aplicación tiene configurado un estilo y una configuración que puede ser modificada al gusto del usuario.

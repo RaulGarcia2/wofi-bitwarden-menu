@@ -3,26 +3,55 @@ import requests
 import subprocess as s
 from typing import Optional, Tuple
 import os
+import sys
 
-WOFI_CFG=os.path.expanduser("~/.config/wofi/dracula/style.css")
-WOFI=["wofi", "-W", "450", "--show", "dmenu", "-s", WOFI_CFG]
+# --- Configuración ---
+def load_config():
+    config = {
+        'HOST': 'localhost',
+        'PORT': 9090,
+        'WOFI_CFG': os.path.expanduser("~/.config/wofi/dracula/style.css"),
+        'LOCK_TIMEOUT': 10
+    }
+    
+    config_path = os.path.expanduser("~/.config/bwmenu.conf")
+    if os.path.exists(config_path):
+        with open(config_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    key, value = line.split('=', 1)
+                    config[key.strip()] = value.strip()
+    
+    # Expandir tilde en WOFI_CFG si existe
+    config['WOFI_CFG'] = os.path.expanduser(config['WOFI_CFG'])
+    return config
+
+CONFIG = load_config()
+WOFI = ["wofi", "-W", "450", "--show", "dmenu", "-s", CONFIG['WOFI_CFG']]
 
 class Bw():
     def __init__(self, host: str, port: int, timeout: int = 5):
         self.host = host
         self.port = port
         self.timeout = timeout
-        self._data = None  # Cambiar a None para mejor cache
+        self._data = None
         self.session = requests.Session()
 
     def _request(self, method, endpoint, **kwargs):
-        """Método centralizado para requests HTTP"""
+        """Método centralizado para requests HTTP con manejo de errores"""
         url = f'http://{self.host}:{self.port}/{endpoint.lstrip("/")}'
         kwargs.setdefault('timeout', self.timeout)
-        return self.session.request(method, url, **kwargs)
+        try:
+            response = self.session.request(method, url, **kwargs)
+            response.raise_for_status()
+            return response
+        except requests.RequestException as e:
+            self.notificacion(f"<b>❌ Error de red</b>\n{str(e)}")
+            return None
 
     def sync(self):
-        """Refresca datos del servicir"""
+        """Refresca datos del servidor"""
         return self._request('POST', '/sync')
 
     def lock(self):
@@ -32,6 +61,7 @@ class Bw():
     def unlock(self):
         """Desbloquea el vault"""
         contra = self.menuContra()
+        if not contra: return None
         return self._request('POST', '/unlock', json={'password': contra})
 
     @property
@@ -44,8 +74,10 @@ class Bw():
     def leeDatos(self):
         """Carga los datos del vault"""
         response = self._request('GET', '/list/object/items')
-        response.raise_for_status()
-        self._data = response.json()
+        if response:
+            self._data = response.json()
+        else:
+            self._data = {'data': {'data': []}}
 
     @property
     def getNombres(self) -> list:
@@ -54,17 +86,22 @@ class Bw():
             self.leeDatos()
         
         res = []
-        for item in self.data['data']['data']:
-            if 'login' in item:
-                name = item['name']
-                username = item['login'].get('username', '')
-                if username:  # Solo si tiene username
-                    res.append(f"{name}: {username}")
-        return sorted(res)  # Ordenado y sin duplicados
+        try:
+            items = self.data.get('data', {}).get('data', [])
+            for item in items:
+                if 'login' in item:
+                    name = item['name']
+                    username = item['login'].get('username', '')
+                    if username:
+                        res.append(f"{name}: {username}")
+        except (KeyError, AttributeError):
+            pass
+        return sorted(res)
 
     def getDatos(self, nombre: str, username: str) -> Optional[Tuple]:
         """Obtiene datos específicos de un elemento"""
-        for item in self.data['data']['data']:
+        items = self.data.get('data', {}).get('data', [])
+        for item in items:
             if (item.get('name') == nombre and 
                 'login' in item and 
                 item['login'].get('username') == username):
@@ -81,24 +118,21 @@ class Bw():
     def getTotp(self, nombre: str, username: str) -> Optional[str]:
         """Obtiene código TOTP para un elemento"""
         datos = self.getDatos(nombre, username)
-        if datos and datos[2]:  # Si tiene ID
+        if datos and datos[2]:
             item_id = datos[2]
             response = self._request('GET', f'/object/totp/{item_id}')
-            if response.status_code == 200:
-                return response.json()['data']['data']
+            if response and response.status_code == 200:
+                return response.json().get('data', {}).get('data')
         return None
 
     @property
     def estado(self) -> Optional[str]:
         """Retorna: 'unlocked', 'locked' o None si hay error"""
-        try:
-            response = self._request('GET', '/status')
-            response.raise_for_status()
+        response = self._request('GET', '/status')
+        if response:
             data = response.json()
             if data.get('success'):
                 return data['data']['template']['status']
-        except requests.RequestException:
-            print('Error de conexión con el host')
         return None
 
     def menuContra(self) -> Optional[str]:
@@ -115,10 +149,11 @@ class Bw():
 
     def menuElementos(self) -> Optional[str]:
         """Muestra menú para seleccionar elemento"""
+        nombres = self.getNombres
+        opciones = ["󰌾  Bloquear cofre", "󰑖  Sincronizar datos"] + nombres
         menu = s.run(
-            WOFI+["--prompt", "🔍 Selecciona elemento:"],
-            input='\n'.join(["🔒 Bloquear gestor contraseñas",
-                            "󰑖  Releer datos"] + self.getNombres),
+            WOFI+["--prompt", "🔍 Buscar elemento..."],
+            input='\n'.join(opciones),
             capture_output=True,
             text=True
         )
@@ -128,14 +163,17 @@ class Bw():
 
     def menuCopiaDato(self, elemento: str) -> Optional[str]:
         """Muestra menú para seleccionar qué dato copiar"""
-        if elemento[2:] == 'Bloquear gestor contraseñas':
+        if elemento == "󰌾  Bloquear cofre":
             self.lock()
             self.notificacion('<b>🔒 Gestor bloqueado</b>')
             return None
-        elif elemento == "󰑖  Releer datos":
+        elif elemento == "󰑖  Sincronizar datos":
             self.sync()
-            self.notificacion('<b>󰑖 Datos sicronizados</b>')
-            elemento=self.menuElementos()
+            self.notificacion('<b>󰑖 Datos sincronizados</b>')
+            return self.menuElementos()
+
+        if ':' not in elemento:
+            return None
 
         sitio, username = elemento.split(':', 1)
         sitio = sitio.strip()
@@ -164,59 +202,66 @@ class Bw():
             ["notify-send", "-a", "Bitwarden", "-t", "3000", "Bitwarden", texto]
         )
 
-
     def main(self):
         """Flujo principal de la aplicación"""
-        if not (elemento := self.menuElementos()):
-            return
+        elemento = self.menuElementos()
+        if not elemento: return
         
-        if not (dato := self.menuCopiaDato(elemento)):
-            return
+        # Si el usuario eligió bloquear o refrescar en el primer menú, ya se manejó en menuCopiaDato indirectamente
+        # o necesitamos volver a llamar si era refrescar datos.
+        if elemento in ["󰌾  Bloquear cofre", "󰑖  Sincronizar datos"]:
+            dato = self.menuCopiaDato(elemento)
+            if not dato: return
+            elemento = dato # Si volvió de un refresco, el nuevo elemento está aquí
         
+        dato = self.menuCopiaDato(elemento)
+        if not dato: return
+        
+        # Si después de elegir elemento eligió una acción de sistema:
+        if dato in ["󰌾  Bloquear cofre", "󰑖  Sincronizar datos"]:
+            return
+
         sitio, username = elemento.split(':', 1)
         sitio = sitio.strip()
         username = username.strip()
         
         if dato.startswith('👤 Username'):
             s.run(['wl-copy', username], check=False)
-            self.notificacion('<b>👤  Username copiado</b>')
+            self.notificacion('<b>👤 Username copiado</b>')
         elif dato.startswith('🔒 Contraseña'):
-            password, *_ = self.getDatos(sitio, username) or ('',)
-            if password:
+            res = self.getDatos(sitio, username)
+            if res:
+                password = res[0]
                 s.run(['wl-copy'], input=password, text=True, timeout=5, check=False)
                 self.notificacion('<b>🔒 Contraseña copiada</b>')
         elif dato.startswith('⏱️ TOTP'):
             totp = self.getTotp(sitio, username)
             if totp:
                 s.run(['wl-copy', totp], check=False)
-                self.notificacion('<b>⏱️  TOTP copiado</b>')
+                self.notificacion('<b>⏱️ TOTP copiado</b>')
 
 if __name__ == '__main__':
-    bw = Bw('rpi5c', 9090)
+    bw = Bw(CONFIG['HOST'], int(CONFIG['PORT']))
     
     estado = bw.estado
     if estado is None:
-        print("No se pudo conectar al servidor")
-        exit(1)
+        sys.exit(1)
     
     if estado == 'locked':
         res = bw.unlock()
-        if not res.json().get('success'):
-            print("Error al desbloquear")
-            exit(1)
-        # Después de desbloquear, hay que recargar datos
+        if not res or not res.json().get('success'):
+            sys.exit(1)
         bw._data = None
     
-    s.run([os.path.expanduser('~/.local/bin/mata-bloqueo-bw.sh')],
-            stderr=s.STDOUT,
-            text=True
-    )
+    # Reiniciar temporizador de bloqueo
+    mata_script = os.path.expanduser('~/.local/bin/mata-bloqueo-bw.sh')
+    if os.path.exists(mata_script):
+        s.run([mata_script], stderr=s.DEVNULL, text=True)
     
-    s.Popen(
-        ['bash', os.path.expanduser('~/.local/bin/bloquea-bw.sh'), "10"],
-        stdout=s.PIPE,  # Capturar salida
-        stderr=s.PIPE,
-        text=True
-    )
+    bloquea_script = os.path.expanduser('~/.local/bin/bloquea-bw.sh')
+    if os.path.exists(bloquea_script):
+        s.Popen(['bash', bloquea_script, str(CONFIG['LOCK_TIMEOUT'])],
+                stdout=s.DEVNULL, stderr=s.DEVNULL, text=True)
 
     bw.main()
+
