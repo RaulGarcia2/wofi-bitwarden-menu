@@ -47,4 +47,9 @@ Descargar el archivo de instalación de [bwmenu](https://github.com/RaulGarcia2/
 sudo apt install wofi-bitwarden-menu.deb
 ```
 ### Otras distribuciones
+Descargar la aplicación con
+```
+git clone https://github.com/RaulGarcia2/wofi-bitwarden-menu.git
+```
 Copiar el script python *bwmenu* y los scripts bash *wofi-bitwarden-mata* y *wofi-bitwarden-bloquea* en la carpeta _$HOME/.local/bin_ , o en una carpeta incluida dentro de la variable de entorno PATH.
+Copiar el archivo *bitwarden.svg* en la carpeta _$HOME/.local/share/icons_ , y el archivo *wofi-bitwarden-menu.desktop* en la carpeta _$HOME/.local/share/applications_
