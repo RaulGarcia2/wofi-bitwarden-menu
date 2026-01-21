@@ -22,6 +22,12 @@ def load_config():
                 if line and not line.startswith('#'):
                     key, value = line.split('=', 1)
                     config[key.strip()] = value.strip()
+    else:
+        with open(config_path, 'w') as f:
+            f.write("HOST=localhost\n")
+            f.write("PORT=9090\n")
+            f.write("WOFI_CFG=~/.config/wofi/dracula/style.css\n")
+            f.write("LOCK_TIMEOUT=10\n")
     
     # Expandir tilde en WOFI_CFG si existe
     config['WOFI_CFG'] = os.path.expanduser(config['WOFI_CFG'])
