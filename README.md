@@ -44,7 +44,8 @@ El script de la aplicación tiene configurado un estilo y una configuración que
 ### Debian
 Descargar el archivo de instalación de [bwmenu](https://github.com/RaulGarcia2/wofi-bitwarden-menu/releases) y ejecutarlo e instalar con el gestor de paquetes:
 ```
-sudo apt install wofi-bitwarden-menu.deb
+sudo dpkg -i wofi-bitwarden-menu.deb
+sudo apt install -f # Para corregir dependencias
 ```
 ### Otras distribuciones
 Descargar la aplicación con
