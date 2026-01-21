@@ -30,7 +30,7 @@ Se creará un acceso de teclado con el que iniciar el script desde donde estemos
 
 Por ejemplo, si tenemos _sway_ podemos incluir en el fichero de configuración correspondiente una linea con:
 ```
-bindsym $mod+Control+b exec /home/usuario/.local/bin/bwmenu
+bindsym $mod+Control+b exec bwmenu
 ```
 Deberemos tener en la red local o en el propio equipo un cliente para Bitwarden llamado bw, deberemos acceder desde ese cliente al servidor de Bitwarden donde tengamos los datos, una vez que estemos autenticados en el servidor iniciaremos un servicio con un comando similar a:
 ```
