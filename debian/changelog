@@ -1,3 +1,9 @@
+wofi-bitwarden-menu (0.8.2) unstable; urgency=medium
+
+  * Corregir instalacion del icono.
+
+ -- Raul Garcia <raul@example.com>  Tue, 21 Jan 2026 18:30:00 +0100
+
 wofi-bitwarden-menu (0.8.1) unstable; urgency=medium
 
   * Renombrar scripts y actualizar referencias.
