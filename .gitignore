@@ -1,3 +1,5 @@
-debian/
+__pycache__
+wofi-bitwarden-menu
+pkg
 build/
 *.deb

@@ -5,6 +5,40 @@ from typing import Optional, Tuple
 import os
 import sys
 
+def bloquea(minutos: int=10):
+    comando = f'echo "curl -X POST \\\"http://{CONFIG['HOST']}:{CONFIG['PORT']}/lock\\\"" | at -q b now + {minutos} minutes'
+    try:
+        resultado = s.run(comando, shell=True, capture_output=True, text=True, check=True)
+        print(f"Comando programado en {minutos} minutos")
+        return resultado.returncode
+    except s.CalledProcessError as e:
+        print("Error al programa el bloqueo")
+        print(comando)
+        print(f"Stderr: {e.stderr}")
+        return e.returncode
+
+def mata_bloqueo():
+    comando='atq -qb'
+    try:
+        resultado = s.run(comando, shell=True, capture_output=True, text=True, check=True)
+    except s.CalledProcessError as e:
+        print("Error al programa el bloqueo")
+        print(comando)
+        print(f"Stderr: {e.stderr}")
+        return e.returncode
+    
+    for a in resultado.stdout.splitlines():
+        comando=f'atrm {a.split()[0]}'
+        try:
+            resultado = s.run(comando, shell=True, capture_output=True, text=True, check=True)
+            print(f"Proceso {a.split()[0]} eliminado")
+        except s.CalledProcessError as e:
+            print("Error al matar el proceso")
+            print(comando)
+            print(f"Stderr: {e.stderr}")
+            return e.returncode
+    
+
 # --- Configuración ---
 def load_config():
     config = {
@@ -62,6 +96,7 @@ class Bw():
 
     def lock(self):
         """Bloquea el vault"""
+        mata_bloqueo()
         return self._request('POST', '/lock')
 
     def unlock(self):
@@ -260,12 +295,8 @@ if __name__ == '__main__':
         bw._data = None
     
     # Reiniciar temporizador de bloqueo
-    if s.run(["which", "wofi-bitwarden-mata"], stdout=s.DEVNULL).returncode == 0:
-        s.run(["wofi-bitwarden-mata"], stderr=s.DEVNULL, text=True)
-    
-    if s.run(["which", "wofi-bitwarden-bloquea"], stdout=s.DEVNULL).returncode == 0:
-        s.Popen(['wofi-bitwarden-bloquea', str(CONFIG['LOCK_TIMEOUT'])],
-                stdout=s.DEVNULL, stderr=s.DEVNULL, text=True)
+    mata_bloqueo()
+    bloquea(int(CONFIG['LOCK_TIMEOUT']))
 
     bw.main()
 
